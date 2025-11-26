@@ -166,6 +166,44 @@
             background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);
         }
         
+        .stat-card.ignored {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        .stat-card h3 {
+            transition: transform 0.3s ease;
+        }
+        
+        .stat-card:hover h3 {
+            transform: scale(1.1);
+        }
+        
+        .stat-card.ignored h3 {
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+        }
+        
+        .stat-card.ignored.updated {
+            animation: flash 0.5s ease;
+        }
+        
+        @keyframes flash {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(245, 87, 108, 0.7);
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(245, 87, 108, 0);
+            }
+        }
+        
         .playlists-section {
             margin-top: 30px;
         }
@@ -182,11 +220,55 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 15px;
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+        
+        .playlist-header:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .playlist-header-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
         }
         
         .playlist-header h3 {
             color: #333;
             font-size: 1.3em;
+            margin: 0;
+        }
+        
+        .collapse-icon {
+            font-size: 1.2em;
+            transition: transform 0.3s;
+            color: #667eea;
+            user-select: none;
+        }
+        
+        .collapse-icon.collapsed {
+            transform: rotate(-90deg);
+        }
+        
+        .playlist-songs-container {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease-out;
+            opacity: 0;
+        }
+        
+        .playlist-songs-container.expanded {
+            max-height: 2000px;
+            opacity: 1;
+            transition: max-height 0.4s ease-in, opacity 0.3s ease-in;
+        }
+        
+        .playlist-songs-container.expanded .songs-list {
+            margin-top: 15px;
         }
         
         .playlist-progress {
@@ -384,6 +466,14 @@
             
             <div id="results" style="display: none;">
                 <div class="stats" id="stats"></div>
+                <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; display: flex; align-items: center; justify-content: space-between;">
+                    <div>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; color: #333;">
+                            <input type="checkbox" id="hideFoundSongs" onchange="toggleHideFoundSongs()" style="width: 18px; height: 18px; cursor: pointer;">
+                            <span>Hide Found Songs (show only missing)</span>
+                        </label>
+                    </div>
+                </div>
                 <div class="playlists-section" id="playlists"></div>
                 
                 <div class="ignored-section" id="ignored-section" style="display: none;">
@@ -402,6 +492,29 @@
         window.addEventListener('DOMContentLoaded', async () => {
             await loadProgressHistory();
             await loadPlaylists();
+            await getIgnoredCount(); // Load ignored count
+            
+            // Set up event delegation for ignore buttons (once on page load)
+            document.addEventListener('click', function(e) {
+                if (e.target.classList.contains('ignore-btn') && e.target.dataset.action === 'ignore') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const trackName = e.target.dataset.trackName;
+                    const artist = e.target.dataset.artist || '';
+                    if (trackName) {
+                        ignoreSong(e, trackName, artist);
+                    }
+                }
+            });
+            
+            // Auto-scan on load if library path is set
+            const libraryPath = document.getElementById('libraryPath').value.trim();
+            if (libraryPath) {
+                // Small delay to ensure UI is ready
+                setTimeout(() => {
+                    startScan();
+                }, 500);
+            }
         });
         
         async function loadPlaylists() {
@@ -617,20 +730,73 @@
             error.classList.add('active');
         }
         
+        // Store original scan data for filtering
+        let currentScanData = null;
+        let ignoredCount = 0;
+        
+        async function getIgnoredCount() {
+            try {
+                const response = await fetch('/api/ignored-songs');
+                const data = await response.json();
+                ignoredCount = data.ignored_songs ? data.ignored_songs.length : 0;
+                return ignoredCount;
+            } catch (err) {
+                console.error('Failed to load ignored count:', err);
+                return 0;
+            }
+        }
+        
+        function updateIgnoredCount(increment = 1) {
+            ignoredCount += increment;
+            const ignoredCountElement = document.getElementById('ignored-count');
+            const ignoredCard = document.getElementById('ignored-stat-card');
+            
+            if (ignoredCountElement) {
+                // Animate the number change
+                ignoredCountElement.style.transform = 'scale(1.2)';
+                ignoredCountElement.textContent = ignoredCount;
+                
+                setTimeout(() => {
+                    ignoredCountElement.style.transform = 'scale(1)';
+                }, 200);
+            }
+            
+            if (ignoredCard) {
+                // Flash animation
+                ignoredCard.classList.add('updated');
+                setTimeout(() => {
+                    ignoredCard.classList.remove('updated');
+                }, 500);
+            }
+        }
+        
         function displayResults(data) {
+            // Store original data
+            currentScanData = JSON.parse(JSON.stringify(data)); // Deep copy
+            
             const results = document.getElementById('results');
             const stats = document.getElementById('stats');
             const playlists = document.getElementById('playlists');
             
-            // Display stats
+            // Check if hide found songs is enabled
+            const hideFound = document.getElementById('hideFoundSongs')?.checked || false;
+            
+            // Filter data if hide found is enabled (only for display, not stats)
+            let displayData = data;
+            if (hideFound) {
+                displayData = filterFoundSongs(data);
+            }
+            
+            // Display stats - always use original unfiltered data
             const matchPercentage = data.total_songs > 0 
                 ? Math.round((data.matched / data.total_songs) * 100) 
                 : 0;
             
+            // Display stats with current ignored count (will update if async call completes)
             stats.innerHTML = `
                 <div class="stat-card">
                     <h3>${data.total_songs}</h3>
-                    <p>Total Songs</p>
+                    <p>Total Songs${hideFound ? ' (showing missing only)' : ''}</p>
                 </div>
                 <div class="stat-card matched">
                     <h3>${data.matched}</h3>
@@ -640,22 +806,41 @@
                     <h3>${data.missing}</h3>
                     <p>Missing</p>
                 </div>
+                <div class="stat-card ignored" id="ignored-stat-card">
+                    <h3 id="ignored-count">${ignoredCount || 0}</h3>
+                    <p>Ignored</p>
+                </div>
             `;
             
-            // Display playlists
+            // Update ignored count if not already loaded
+            if (ignoredCount === 0) {
+                getIgnoredCount().then(count => {
+                    const ignoredCountElement = document.getElementById('ignored-count');
+                    if (ignoredCountElement) {
+                        ignoredCountElement.textContent = count;
+                    }
+                });
+            }
+            
+            // Display playlists - use filtered data if hide found is enabled
             playlists.innerHTML = '';
             
-            for (const [playlistName, playlistData] of Object.entries(data.playlists)) {
+            for (const [playlistName, playlistData] of Object.entries(displayData.playlists)) {
                 const percentage = playlistData.total > 0 
                     ? Math.round((playlistData.matched / playlistData.total) * 100) 
                     : 0;
                 
+                const playlistId = `playlist-${playlistName.replace(/[^a-zA-Z0-9]/g, '-')}`;
                 const playlistCard = document.createElement('div');
                 playlistCard.className = 'playlist-card';
+                playlistCard.id = playlistId;
                 
                 playlistCard.innerHTML = `
-                    <div class="playlist-header">
-                        <h3>${playlistName}</h3>
+                    <div class="playlist-header" onclick="togglePlaylist('${playlistId}')">
+                        <div class="playlist-header-content">
+                            <span class="collapse-icon collapsed" id="${playlistId}-icon">▼</span>
+                            <h3>${escapeHtml(playlistName)}</h3>
+                        </div>
                         <div class="playlist-progress">
                             <div class="progress-bar">
                                 <div class="progress-fill" style="width: ${percentage}%">${percentage}%</div>
@@ -663,23 +848,25 @@
                             <span>${playlistData.matched}/${playlistData.total}</span>
                         </div>
                     </div>
-                    <div class="songs-list">
-                        ${playlistData.songs.map(song => `
-                            <div class="song-item">
-                                <div class="song-info">
-                                    <div class="song-title">${escapeHtml(song.track_name)}</div>
-                                    <div class="song-artist">${escapeHtml(song.artist || 'Unknown Artist')}</div>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 10px;">
-                                    <div class="song-status ${song.found ? 'found' : 'missing'}">
-                                        ${song.found ? '✓ Found' : '✗ Missing'}
+                    <div class="playlist-songs-container" id="${playlistId}-songs">
+                        <div class="songs-list" style="max-height: 300px; overflow-y: auto;">
+                            ${playlistData.songs.map(song => `
+                                <div class="song-item">
+                                    <div class="song-info">
+                                        <div class="song-title">${escapeHtml(song.track_name)}</div>
+                                        <div class="song-artist">${escapeHtml(song.artist || 'Unknown Artist')}</div>
                                     </div>
-                                    <button class="ignore-btn" onclick="ignoreSong(${JSON.stringify(song.track_name)}, ${JSON.stringify(song.artist || '')})">
-                                        Ignore
-                                    </button>
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <div class="song-status ${song.found ? 'found' : 'missing'}">
+                                            ${song.found ? '✓ Found' : '✗ Missing'}
+                                        </div>
+                                        <button class="ignore-btn" data-track-name='${escapeHtml(song.track_name)}' data-artist='${escapeHtml(song.artist || '')}' data-action='ignore'>
+                                            Ignore
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        `).join('')}
+                            `).join('')}
+                        </div>
                     </div>
                 `;
                 
@@ -695,10 +882,115 @@
             return div.innerHTML;
         }
         
-        async function ignoreSong(trackName, artist) {
-            if (!confirm(`Add "${trackName}" by ${artist || 'Unknown Artist'} to ignore list?`)) {
+        function togglePlaylist(playlistId) {
+            const songsContainer = document.getElementById(`${playlistId}-songs`);
+            const icon = document.getElementById(`${playlistId}-icon`);
+            
+            if (songsContainer.classList.contains('expanded')) {
+                songsContainer.classList.remove('expanded');
+                icon.classList.add('collapsed');
+            } else {
+                songsContainer.classList.add('expanded');
+                icon.classList.remove('collapsed');
+            }
+        }
+        
+        function filterFoundSongs(data) {
+            // Create a filtered copy of the data
+            const filtered = JSON.parse(JSON.stringify(data));
+            filtered.songs = data.songs.filter(song => !song.found);
+            filtered.matched = 0;
+            filtered.total_songs = filtered.songs.length;
+            filtered.missing = filtered.total_songs;
+            
+            // Filter playlist data
+            filtered.playlists = {};
+            for (const [playlistName, playlistData] of Object.entries(data.playlists)) {
+                const filteredSongs = playlistData.songs.filter(song => !song.found);
+                if (filteredSongs.length > 0) {
+                    filtered.playlists[playlistName] = {
+                        total: filteredSongs.length,
+                        matched: 0,
+                        missing: filteredSongs.length,
+                        songs: filteredSongs
+                    };
+                }
+            }
+            
+            return filtered;
+        }
+        
+        function toggleHideFoundSongs() {
+            if (currentScanData) {
+                displayResults(currentScanData);
+            }
+        }
+        
+        function updateStatsAfterIgnore(wasFound) {
+            if (!currentScanData) return;
+            
+            const hideFound = document.getElementById('hideFoundSongs')?.checked || false;
+            
+            // Update stats cards with current data (keep ignored count)
+            const matchPercentage = currentScanData.total_songs > 0 
+                ? Math.round((currentScanData.matched / currentScanData.total_songs) * 100) 
+                : 0;
+            
+            // Update individual stat values without recreating the ignored card
+            const totalStat = document.querySelector('.stat-card:not(.matched):not(.missing):not(.ignored) h3');
+            const matchedStat = document.querySelector('.stat-card.matched h3');
+            const missingStat = document.querySelector('.stat-card.missing h3');
+            
+            if (totalStat) totalStat.textContent = currentScanData.total_songs;
+            if (matchedStat) {
+                matchedStat.textContent = currentScanData.matched;
+                matchedStat.parentElement.querySelector('p').textContent = `Found (${matchPercentage}%)`;
+            }
+            if (missingStat) missingStat.textContent = currentScanData.missing;
+        }
+        
+        function updatePlaylistProgress() {
+            // Update progress bars for playlists that had songs removed
+            if (!currentScanData) return;
+            
+            for (const [playlistName, playlistData] of Object.entries(currentScanData.playlists)) {
+                const playlistId = `playlist-${playlistName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                const progressBar = document.querySelector(`#${playlistId} .progress-fill`);
+                const progressText = document.querySelector(`#${playlistId} .playlist-progress span`);
+                
+                if (progressBar && progressText) {
+                    const percentage = playlistData.total > 0 
+                        ? Math.round((playlistData.matched / playlistData.total) * 100) 
+                        : 0;
+                    
+                    progressBar.style.width = `${percentage}%`;
+                    progressBar.textContent = `${percentage}%`;
+                    progressText.textContent = `${playlistData.matched}/${playlistData.total}`;
+                }
+            }
+        }
+        
+        async function ignoreSong(event, trackName, artist) {
+            // Prevent event bubbling
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            
+            if (!trackName) {
+                console.error('Track name is missing');
                 return;
             }
+            
+            // Get button element from event
+            const buttonElement = event ? event.target : null;
+            
+            if (!buttonElement) {
+                console.error('Could not find button element');
+                return;
+            }
+            
+            console.log('Button element found:', buttonElement);
             
             try {
                 const response = await fetch('/api/ignored-songs', {
@@ -715,12 +1007,101 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    alert('Song added to ignore list. Run a new scan to see updated results.');
+                    // Update ignored count immediately
+                    updateIgnoredCount(1);
+                    
+                    // Find the song item element
+                    const songItem = buttonElement.closest('.song-item');
+                    if (!songItem) {
+                        console.error('Could not find song-item parent element');
+                        // Fallback: refresh display
+                        if (currentScanData) {
+                            removeSongFromScanData(currentScanData, trackName, artist);
+                            displayResults(currentScanData);
+                        }
+                        return;
+                    }
+                    
+                    // Update currentScanData - remove song from data BEFORE hiding
+                    if (currentScanData) {
+                        const wasFound = songItem.querySelector('.song-status.found') !== null;
+                        removeSongFromScanData(currentScanData, trackName, artist);
+                        updateStatsAfterIgnore(wasFound);
+                    }
+                    
+                    // Hide the song with animation
+                    songItem.style.transition = 'opacity 0.3s, max-height 0.3s, margin 0.3s, padding 0.3s';
+                    songItem.style.opacity = '0';
+                    songItem.style.maxHeight = songItem.offsetHeight + 'px';
+                    
+                    // Trigger reflow
+                    songItem.offsetHeight;
+                    
+                    songItem.style.maxHeight = '0';
+                    songItem.style.overflow = 'hidden';
+                    songItem.style.margin = '0';
+                    songItem.style.padding = '0';
+                    
+                    setTimeout(() => {
+                        songItem.remove();
+                        
+                        // Update playlist progress bars
+                        updatePlaylistProgress();
+                    }, 350);
                 } else {
                     alert('Error: ' + (data.error || 'Failed to add song to ignore list'));
                 }
             } catch (err) {
                 alert('Error: ' + err.message);
+            }
+        }
+        
+        function removeSongFromScanData(data, trackName, artist) {
+            // Find the song before removing to update counts correctly
+            const songToRemove = data.songs.find(song => 
+                song.track_name === trackName && song.artist === artist
+            );
+            
+            if (!songToRemove) return;
+            
+            // Remove from main songs array
+            data.songs = data.songs.filter(song => 
+                !(song.track_name === trackName && song.artist === artist)
+            );
+            
+            // Update totals
+            if (songToRemove.found) {
+                data.matched = Math.max(0, data.matched - 1);
+            } else {
+                data.missing = Math.max(0, data.missing - 1);
+            }
+            data.total_songs = data.songs.length;
+            
+            // Update playlist data
+            for (const [playlistName, playlistData] of Object.entries(data.playlists)) {
+                const playlistSongIndex = playlistData.songs.findIndex(song => 
+                    song.track_name === trackName && song.artist === artist
+                );
+                
+                if (playlistSongIndex !== -1) {
+                    const playlistSong = playlistData.songs[playlistSongIndex];
+                    
+                    // Remove from playlist
+                    playlistData.songs.splice(playlistSongIndex, 1);
+                    
+                    // Update playlist counts
+                    if (playlistSong.found) {
+                        playlistData.matched = Math.max(0, playlistData.matched - 1);
+                    } else {
+                        playlistData.missing = Math.max(0, playlistData.missing - 1);
+                    }
+                    playlistData.total = playlistData.songs.length;
+                    
+                    // Remove empty playlists
+                    if (playlistData.total === 0) {
+                        delete data.playlists[playlistName];
+                    }
+                }
             }
         }
         
@@ -771,6 +1152,8 @@
                 const data = await response.json();
                 
                 if (response.ok) {
+                    // Update ignored count
+                    updateIgnoredCount(-1);
                     alert('Song removed from ignore list. Run a new scan to see it again.');
                     showIgnoredSongs(); // Refresh the list
                 } else {

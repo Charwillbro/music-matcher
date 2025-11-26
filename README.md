@@ -8,12 +8,15 @@ A simple web dashboard to match your Spotify playlists with your local music lib
 
 - Scans Spotify playlist CSV files from the configured directory
 - **Select which playlists to scan** - Check/uncheck playlists before scanning
+- **Collapsible playlists** - Expand/collapse playlist sections to manage large lists
 - Matches playlist songs to your local music files
-- Shows progress by playlist and overall statistics
-- **Ignore list** - Hide songs you're not interested in from future scans
+- Shows progress by playlist and overall statistics with live counters
+- **Ignore list** - Hide songs you're not interested in (persists across runs)
+- **Hide found songs toggle** - Show only missing songs to focus on what you need
+- **Auto-scan on page load** - Automatically scans when library path is set
 - **Tracks progress over time** - See how your library coverage improves
 - Historical charts showing match percentage and song counts
-- Clean, modern web dashboard with interactive charts
+- Clean, modern web dashboard with interactive charts and animations
 
 ## Setup
 
@@ -34,9 +37,10 @@ python app.py
 
 4. Open your browser to `http://localhost:5000`
 
-5. Enter the path to your music library folder (or use the default)
-6. Select which playlists you want to scan (check/uncheck playlists)
-7. Click "Scan Library"
+5. The app will auto-scan on load if a library path is configured, or:
+   - Enter the path to your music library folder (or use the default)
+   - Select which playlists you want to scan (check/uncheck playlists)
+   - Click "Scan Library"
 
 ## How It Works
 
@@ -57,10 +61,18 @@ python app.py
 
 ## Ignore List
 
-- Click the "Ignore" button on any song to hide it from future scans
-- Ignored songs are stored in the database and automatically filtered out
+- Click the "Ignore" button on any song to immediately hide it from the current view
+- Ignored songs are stored in the database and automatically filtered out from future scans
+- **Persistent across app restarts** - Ignored songs remain ignored until you remove them
 - View all ignored songs using "View All Ignored Songs" button
 - Remove songs from the ignore list to see them again in scans
+- Live counter shows total ignored songs with animations
+
+## View Options
+
+- **Collapsible Playlists** - Click playlist headers to expand/collapse song lists
+- **Hide Found Songs** - Toggle to show only missing songs for focused viewing
+- All view preferences work together for better organization
 
 ## Data Storage
 
