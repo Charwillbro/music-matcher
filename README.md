@@ -9,10 +9,12 @@ A simple web dashboard to match your Spotify playlists with your local music lib
 - Scans Spotify playlist CSV files from the configured directory
 - **Select which playlists to scan** - Check/uncheck playlists before scanning
 - **Collapsible playlists** - Expand/collapse playlist sections to manage large lists
+- **Drag & drop reordering** - Reorder playlists by preference (order persists)
 - Matches playlist songs to your local music files
 - Shows progress by playlist and overall statistics with live counters
 - **Ignore list** - Hide songs you're not interested in (persists across runs)
 - **Hide found songs toggle** - Show only missing songs to focus on what you need
+- **YouTube search links** - Quick search buttons for each song on YouTube
 - **Auto-scan on page load** - Automatically scans when library path is set
 - **Tracks progress over time** - See how your library coverage improves
 - Historical charts showing match percentage and song counts
@@ -72,6 +74,8 @@ python app.py
 
 - **Collapsible Playlists** - Click playlist headers to expand/collapse song lists
 - **Hide Found Songs** - Toggle to show only missing songs for focused viewing
+- **Drag & Drop Reordering** - Drag playlists by the ☰ icon to reorder them (order persists across sessions)
+- **YouTube Search Links** - Click "▶ YouTube" on any song to search for it on YouTube
 - All view preferences work together for better organization
 
 ## Data Storage
