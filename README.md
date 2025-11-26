@@ -2,6 +2,8 @@
 
 A simple web dashboard to match your Spotify playlists with your local music library.
 
+🔗 **GitHub Repository:** https://github.com/Charwillbro/music-matcher
+
 ## Features
 
 - Scans Spotify playlist CSV files from the configured directory
